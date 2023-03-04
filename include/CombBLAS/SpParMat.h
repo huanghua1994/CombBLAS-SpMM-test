@@ -377,9 +377,9 @@ public:
 			  typename UDER> 
 	friend
 	FullyDistDMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-	SpMM_sA (const SpParMat<IU, NUM, UDER> &A,
-			 const FullyDistDMat<IU, NUV> &X,
-			 spmm_stats &stats);
+	SpMM_sA_CPU (const SpParMat<IU, NUM, UDER> &A,
+				 const FullyDistDMat<IU, NUV> &X,
+				 spmm_stats &stats);
 
 	template <typename SR,
 			  typename IU,
@@ -388,9 +388,9 @@ public:
 			  typename UDER> 
 	friend
 	DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-	SpMM_sA_2D (const SpParMat<IU, NUM, UDER> &A,
-				const DnParMat<IU, NUV> &X,
-				spmm_stats &stats);
+	SpMM_sA_2D_CPU (const SpParMat<IU, NUM, UDER> &A,
+					const DnParMat<IU, NUV> &X,
+					spmm_stats &stats);
 
 	template <typename SR,
 			  typename IU,
@@ -399,9 +399,44 @@ public:
 			  typename UDER>
 	friend
 	DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-	SpMM_sC (const SpParMat<IU, NUM, UDER>	&A,
-			 const DnParMat<IU, NUV> &X,
-			 spmm_stats &stats);
+	SpMM_sC_CPU (const SpParMat<IU, NUM, UDER>	&A,
+				 const DnParMat<IU, NUV> &X,
+				 spmm_stats &stats);
+
+	#ifdef USE_CUDA
+	template <typename SR,
+			  typename IU,
+			  typename NUM,
+			  typename NUV,
+			  typename UDER> 
+	friend
+	FullyDistDMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
+	SpMM_sA_CUDA (const SpParMat<IU, NUM, UDER> &A,
+				  const FullyDistDMat<IU, NUV> &X,
+				  spmm_stats &stats);
+
+	template <typename SR,
+			  typename IU,
+			  typename NUM,
+			  typename NUV,
+			  typename UDER> 
+	friend
+	DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
+	SpMM_sA_2D_CUDA (const SpParMat<IU, NUM, UDER> &A,
+					 const DnParMat<IU, NUV> &X,
+					 spmm_stats &stats);
+
+	template <typename SR,
+			  typename IU,
+			  typename NUM,
+			  typename NUV,
+			  typename UDER>
+	friend
+	DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
+	SpMM_sC_CUDA (const SpParMat<IU, NUM, UDER>	&A,
+				  const DnParMat<IU, NUV> &X,
+				  spmm_stats &stats);
+	#endif
 
 private:
 	typedef std::array<char, MAXVERTNAME> STRASARRAY;

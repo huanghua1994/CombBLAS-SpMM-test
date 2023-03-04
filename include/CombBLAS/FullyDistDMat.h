@@ -111,7 +111,7 @@ private:
 			  typename UDER> 
 	friend
 	FullyDistDMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-	SpMM_sA (const SpParMat<IU, NUM, UDER> &A,
+	SpMM_sA_CPU (const SpParMat<IU, NUM, UDER> &A,
 			 const FullyDistDMat<IU, NUV> &X,
 			 spmm_stats &stats);
 };

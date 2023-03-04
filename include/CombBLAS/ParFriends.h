@@ -43,8 +43,6 @@
 #include "MultiwayMerge.h"
 #include "DnParMat.h"
 
-// #include "mkl.h"
-
 #include <type_traits>
 
 namespace combblas {
@@ -2445,6 +2443,8 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 	MPI_Comm_size(MPI_COMM_WORLD, &np);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+	tmp += "                        MIN      AVG      MAX\n";
+
 	MPI_Reduce(&stats.t_g_h2d_memcpy, &t_g_h2d_memcpy[0], 1,
 			   MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&stats.t_g_h2d_memcpy, &t_g_h2d_memcpy[1], 1,
@@ -2495,7 +2495,7 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 			   MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&stats.t_sA_comm_pre, &t_sA_comm_pre[2], 1,
 			   MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-	tmp += "sA-comm-pre        " +
+	tmp += "sA-comm-agv-X      " +
 		std::to_string(t_sA_comm_pre[1]) + " " +
 		std::to_string(t_sA_comm_pre[0]/np) + " " +
 		std::to_string(t_sA_comm_pre[2]) + "\n";
@@ -2506,7 +2506,7 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 			   MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&stats.t_sA_comm_post, &t_sA_comm_post[2], 1,
 			   MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-	tmp += "sA-comm-post       " +
+	tmp += "sA-comm-reduscat-Y " +
 		std::to_string(t_sA_comm_post[1]) + " " +
 		std::to_string(t_sA_comm_post[0]/np) + " " +
 		std::to_string(t_sA_comm_post[2]) + "\n";
@@ -2517,7 +2517,7 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 			   MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&stats.t_sC_comm_bcastA, &t_sC_comm_bcastA[2], 1,
 			   MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-	tmp += "sC-comm-bcastS     " +
+	tmp += "sC-comm-bcastA     " +
 		std::to_string(t_sC_comm_bcastA[1]) + " " +
 		std::to_string(t_sC_comm_bcastA[0]/np) + " " +
 		std::to_string(t_sC_comm_bcastA[2]) + "\n";
@@ -2528,7 +2528,7 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 			   MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&stats.t_sC_comm_bcastX, &t_sC_comm_bcastX[2], 1,
 			   MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-	tmp += "sC-comm-bcastD     " +
+	tmp += "sC-comm-bcastX     " +
 		std::to_string(t_sC_comm_bcastX[1]) + " " +
 		std::to_string(t_sC_comm_bcastX[0]/np) + " " +
 		std::to_string(t_sC_comm_bcastX[2]) + "\n";
@@ -2561,7 +2561,7 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 			   MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&stats.t_comp, &t_comp[2], 1,
 			   MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-	tmp += "comp               " +
+	tmp += "local comp         " +
 		std::to_string(t_comp[1]) + " " +
 		std::to_string(t_comp[0]/np) + " " +
 		std::to_string(t_comp[2]) + "\n";
@@ -2572,7 +2572,7 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 			   MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&stats.t_tot, &t_tot[2], 1,
 			   MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-	tmp += "tot                " +
+	tmp += "total time         " +
 		std::to_string(t_tot[1]) + " " +
 		std::to_string(t_tot[0]/np) + " " +
 		std::to_string(t_tot[2]) + "\n";
@@ -2596,7 +2596,383 @@ template <typename SR,
 		  typename NUV,
 		  typename UDER> 
 FullyDistDMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-SpMM_sA
+SpMM_sA_CPU
+(
+    const SpParMat<IU, NUM, UDER>	&A,
+	const FullyDistDMat<IU, NUV>	&X,
+	spmm_stats						&stats
+)
+{
+	auto t_tot_beg = std::chrono::high_resolution_clock::now();
+	
+	int rank;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	
+	typedef typename promote_trait<NUM, NUV>::T_promote T_promote;
+
+
+	auto t_beg = std::chrono::high_resolution_clock::now();	
+
+	MPI_Comm	world  = X.commGrid->GetWorld();
+	MPI_Comm	cworld = X.commGrid->GetColWorld();
+	MPI_Comm	rworld = X.commGrid->GetRowWorld();
+
+	int			xsize	  = (int) X.LocArrSize();
+	int			trxsize	  = 0;
+	int			diagneigh = X.commGrid->GetComplementRank();
+	MPI_Status	status;
+	MPI_Sendrecv(&xsize, 1, MPI_INT, diagneigh, TRX,
+				 &trxsize, 1, MPI_INT, diagneigh, TRX,
+				 world, &status);
+
+	
+	NUV *trxnums = new NUV[trxsize];
+	MPI_Sendrecv(const_cast<NUV *>(SpHelper::p2a(X.arr_)),
+				 xsize, MPIType<NUV>(),
+				 diagneigh, TRX,
+				 trxnums, trxsize, MPIType<NUV>(),
+				 diagneigh, TRX, world, &status);
+
+	int cneighs, crank;
+	MPI_Comm_size(cworld, &cneighs);
+	MPI_Comm_rank(cworld, &crank);
+	int *csize = new int[cneighs];
+	csize[crank] = trxsize;
+	MPI_Allgather(MPI_IN_PLACE, 1, MPI_INT, csize, 1, MPI_INT, cworld);
+	
+	int *dpls = new int[cneighs]();
+	std::partial_sum(csize, csize+cneighs-1, dpls+1);
+	int accsize = std::accumulate(csize, csize+cneighs, 0);
+	NUV *numacc = new NUV[accsize];
+	
+	MPI_Allgatherv(trxnums, trxsize, MPIType<NUV>(),
+				   numacc, csize, dpls, MPIType<NUV>(), cworld);
+	delete [] trxnums;
+
+	auto t_end = std::chrono::high_resolution_clock::now();
+	stats.t_sA_comm_pre += static_cast<std::chrono::duration<double> >
+		(t_end-t_beg).count();
+	
+	// local SpMM
+	T_promote	 id	   = SR::id();
+	IU			 ysize = (int64_t)A.getlocalrows() * X.getncol();
+	T_promote	*y_loc = new T_promote[ysize];	
+		
+	std::fill_n(y_loc, ysize, id);
+
+
+	t_beg = std::chrono::high_resolution_clock::now();
+	csc_gespmm_mkl<SR>(*(A.spSeq), numacc, y_loc, (int)X.getncol(), static_cast<NUM>(0.0), stats);
+	t_end = std::chrono::high_resolution_clock::now();
+	stats.t_comp += static_cast<std::chrono::duration<double> >
+		(t_end-t_beg).count();
+
+
+	DeleteAll(numacc, csize, dpls);
+
+	// reduce output - MPI_Reduce_scatter version
+	FullyDistDMat<IU, T_promote> Y(X.commGrid, A.getnrow(), X.getncol(), id);
+	int rneighs;
+	MPI_Comm_size(rworld, &rneighs);
+	
+	int *recvcounts = new int[rneighs];
+	for (int i = 0; i < rneighs; ++i)
+	{
+		IU tmp;
+		if (i == rneighs-1)
+			tmp = ysize;
+		else
+			tmp = Y.RowLenUntil(i+1) * Y.getncol();
+		
+		recvcounts[i] = tmp - (Y.RowLenUntil(i) * Y.getncol());
+	}
+	
+	t_beg = std::chrono::high_resolution_clock::now();
+	MPI_Reduce_scatter(y_loc, SpHelper::p2a(Y.arr_), recvcounts,
+					   MPIType<T_promote>(), SR::mpi_op(), rworld);
+	t_end = std::chrono::high_resolution_clock::now();
+	stats.t_sA_comm_post += static_cast<std::chrono::duration<double> >
+		(t_end-t_beg).count();
+
+
+	auto t_tot_end = std::chrono::high_resolution_clock::now();
+	stats.t_tot += static_cast<std::chrono::duration<double> >
+		(t_tot_end-t_tot_beg).count();
+
+	delete [] y_loc;
+	delete [] recvcounts;
+	
+	return Y;
+}
+
+
+
+template <typename SR,
+		  typename IU,
+		  typename NUM,
+		  typename NUV,
+		  typename UDER> 
+DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
+SpMM_sA_2D_CPU
+(
+    const SpParMat<IU, NUM, UDER>	&A,
+	const DnParMat<IU, NUV>			&X,
+	spmm_stats						&stats
+)
+{
+	auto t_tot_beg = std::chrono::high_resolution_clock::now();
+
+	int rank;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+	typedef typename promote_trait<NUM, NUV>::T_promote NT_Y;
+	typedef typename UDER::LocalIT LIA;
+
+	int nstages, dummy;
+	std::shared_ptr<CommGrid> cgr_Y =
+		ProductGrid(A.getcommgrid().get(), (X.cgr).get(), nstages,
+					dummy, dummy);
+	LIA		Y_m = A.getnrow();
+	IU		Y_n = X.getgncol();
+	NT_Y	id	= SR::id();
+	DnParMat<IU, NT_Y> Y(cgr_Y, Y_m, Y_n, id);
+
+	MPI_Comm	world  = X.cgr->GetWorld();
+	MPI_Comm	cworld = X.cgr->GetColWorld();
+	MPI_Comm	rworld = X.cgr->GetRowWorld();
+
+	// exchange local matrices along the diagonal
+	int	xsize = (int)X.getnels();
+	IU	trx_nrows, trx_ncols, trxsize;
+	X.get_local_length(X.cgr->GetRankInProcRow(), X.cgr->GetRankInProcCol(),
+					   trx_nrows, trx_ncols, trxsize);
+		
+	int			diagneigh = X.cgr->GetComplementRank();
+	MPI_Status	status;
+	NUV *trxnums = new NUV[trxsize];
+	MPI_Sendrecv(const_cast<NUV *>(SpHelper::p2a(X.arr)),
+				 xsize, MPIType<NUV>(),
+				 diagneigh, TRX,
+				 trxnums, trxsize, MPIType<NUV>(),
+				 diagneigh, TRX, world, &status);
+
+	IU *XRecvSizes = new IU[nstages];
+	IU	max_xrecv_size = 0;
+	for (int s = 0; s < nstages; ++s)
+	{
+		IU tmp1, tmp2;
+		X.get_local_length(X.cgr->GetRankInProcRow(), s,
+						   tmp1, tmp2, XRecvSizes[s]);
+		max_xrecv_size = std::max(max_xrecv_size, XRecvSizes[s]);
+	}
+
+	IU *YSendSizes = new IU[nstages];
+	IU	max_ysend_size = 0;
+	for (int s = 0; s < nstages; ++s)
+	{
+		IU tmp1, tmp2;
+		Y.get_local_length(Y.cgr->GetRankInProcCol(), s,
+						   tmp1, tmp2, YSendSizes[s]);
+		max_ysend_size = std::max(max_ysend_size, YSendSizes[s]);
+	}
+	
+
+	NUV	*XRecv = new NUV[max_xrecv_size];
+	NUV	*YSend = new NUV[max_ysend_size];
+	for (int s = 0; s < nstages; ++s)
+	{
+		auto t_beg = std::chrono::high_resolution_clock::now();
+		
+		// broadcast X
+		NUV *XRecv_cur = XRecv;
+		if (s == X.cgr->GetRankInProcCol())
+			XRecv_cur = trxnums;
+
+		MPI_Bcast(XRecv_cur, XRecvSizes[s], MPIType<NUV>(),
+				  s, X.cgr->GetColWorld());
+
+		auto t_end = std::chrono::high_resolution_clock::now();
+		
+		stats.t_sA_2D_comm_bcastX += static_cast<std::chrono::duration<double> >
+			(t_end-t_beg).count();
+		
+		t_beg = std::chrono::high_resolution_clock::now();
+
+		// init Y		
+		NUV *YSend_cur = YSend;
+		
+		std::fill_n(YSend_cur, YSendSizes[s], id);
+
+		csc_gespmm_mkl<SR>(*(A.spSeq), XRecv_cur, YSend_cur, (int)X.getncol(), static_cast<NUM>(0.0), stats);
+
+		t_end = std::chrono::high_resolution_clock::now();
+		
+		stats.t_comp += static_cast<std::chrono::duration<double> >
+			(t_end-t_beg).count();
+		
+		t_beg = std::chrono::high_resolution_clock::now();
+
+		// reduce
+		MPI_Reduce(YSend_cur, SpHelper::p2a(Y.arr), YSendSizes[s],
+				   MPIType<NT_Y>(), SR::mpi_op(), s, Y.cgr->GetRowWorld());
+
+		t_end = std::chrono::high_resolution_clock::now();
+		stats.t_sA_2D_comm_reduceY +=
+			static_cast<std::chrono::duration<double> >(t_end-t_beg).count();
+	}
+
+	delete [] XRecv;
+	delete [] YSend;
+
+	auto t_tot_end = std::chrono::high_resolution_clock::now();
+	stats.t_tot += static_cast<std::chrono::duration<double> >
+		(t_tot_end-t_tot_beg).count();
+	
+	return Y;
+}
+
+
+
+template <typename SR,
+		  typename IU,
+		  typename NUM,
+		  typename NUV,
+		  typename UDER> 
+DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
+SpMM_sC_CPU
+(
+    const SpParMat<IU, NUM, UDER>	&A,
+	const DnParMat<IU, NUV>			&X,
+	spmm_stats						&stats
+)
+{
+	auto t_tot_beg = std::chrono::high_resolution_clock::now();
+	
+	
+	int rank;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	std::string dbgfile = std::string("spmm-debug-P") + std::to_string(rank);
+	std::ofstream ofs;
+	// ofs.open(dbgfile.c_str());
+	// ofs << "in SpMM" << std::endl;
+	
+	typedef typename promote_trait<NUM, NUV>::T_promote NT_Y;
+	typedef typename UDER::LocalIT LIA;
+
+	int nstages, dummy;
+	std::shared_ptr<CommGrid> cgr_Y =
+		ProductGrid((A.commGrid).get(), (X.cgr).get(), nstages, dummy, dummy);
+	LIA		Y_m = A.getnrow();
+	IU		Y_n = X.getgncol();
+	NT_Y	id	= SR::id();
+	DnParMat<IU, NT_Y> Y(cgr_Y, Y_m, Y_n, id);
+	int Aself		   = (A.commGrid)->GetRankInProcRow();
+    int Xself		   = X.cgr->GetRankInProcCol();
+	IU	max_xrecv_size = 0;
+
+	// ofs << "matrix Y sizes: " << Y_m << " " << Y_n << "\n";	
+
+	LIA **ARecvSizes = SpHelper::allocate2D<LIA>(UDER::esscount, nstages);
+	IU	 *XRecvSizes = new IU[nstages];
+	
+	XRecvSizes[Xself] = X.getnels();
+
+	SpParHelper::GetSetSizes(*(A.spSeq), ARecvSizes, (A.commGrid)->GetRowWorld());
+	MPI_Allgather(MPI_IN_PLACE, 1, MPIType<IU>(),
+				  XRecvSizes, 1, MPIType<IU>(), X.cgr->GetColWorld());
+
+	for (int i = 0; i < nstages; ++i)
+		max_xrecv_size = std::max(max_xrecv_size, XRecvSizes[i]);
+
+	// ofs << "XRecvSizes:\n";
+	// for (int i = 0; i < nstages; ++i)
+	// 	ofs << XRecvSizes[i] << " ";
+	// ofs << "\n";
+	// ofs << "max X recv size: " << max_xrecv_size << "\n";
+
+	UDER	*ARecv = NULL;
+	NUV		*XRecv = new NUV[max_xrecv_size];
+
+	for (int s = 0; s < nstages; ++s)
+	{
+		auto t_beg = std::chrono::high_resolution_clock::now();
+		
+		
+		// broadcast A
+		std::vector<LIA> ess;
+		if (s == Aself)
+			ARecv = A.spSeq;
+		else
+		{
+			ess.resize(UDER::esscount);
+			for (int j = 0; j < UDER::esscount; ++j)
+				ess[j] = ARecvSizes[j][s];
+			ARecv = new UDER();
+		}
+
+		SpParHelper::BCastMatrix(cgr_Y->GetRowWorld(), *ARecv, ess, s);
+
+
+		auto t_end = std::chrono::high_resolution_clock::now();
+		stats.t_sC_comm_bcastA += static_cast<std::chrono::duration<double> >
+			(t_end-t_beg).count();
+		
+		t_beg = std::chrono::high_resolution_clock::now();
+		
+
+		// broadcast X
+		NUV *XRecv_cur = XRecv;
+		if (s == Xself)
+			XRecv_cur = (NUV *)X.arr.data();
+
+		MPI_Bcast(XRecv_cur, XRecvSizes[s], MPIType<NUV>(),
+				  s, cgr_Y->GetColWorld());
+
+
+		t_end = std::chrono::high_resolution_clock::now();
+		stats.t_sC_comm_bcastX += static_cast<std::chrono::duration<double> >
+			(t_end-t_beg).count();
+
+		t_beg = std::chrono::high_resolution_clock::now();
+		
+
+		// ofs << "stage " << s << " ARecv " << ARecv->getnrow() << " "
+		// 	<< ARecv->getncol() << " " << ARecv->getnnz() << "\n";
+		// ofs << "stage " << s << " XRecv size " << XRecvSizes[s] << "\n";
+		// ofs << "stage " << s << " Y " << Y.m_ << " " << Y.n_ << std::endl;
+		// ofs << std::flush;
+
+		// assert (XRecv_cur != NULL && Y.arr_.data() != NULL);
+		csc_gespmm_mkl<SR>(*ARecv, XRecv_cur, Y.arr.data(),
+								(int)X.getncol(), static_cast<NUM>(1.0), stats);
+
+		t_end = std::chrono::high_resolution_clock::now();
+		stats.t_comp += static_cast<std::chrono::duration<double> >
+			(t_end-t_beg).count();
+
+		// Y.PrintToFile("SpMM-Y");
+	}
+
+
+	delete [] XRecv;
+
+	auto t_tot_end = std::chrono::high_resolution_clock::now();
+	stats.t_tot += static_cast<std::chrono::duration<double> >
+		(t_tot_end-t_tot_beg).count();
+	
+	// ofs.close();
+	
+	return Y;
+}
+
+#ifdef USE_CUDA
+template <typename SR,
+		  typename IU,
+		  typename NUM,
+		  typename NUV,
+		  typename UDER> 
+FullyDistDMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
+SpMM_sA_CUDA
 (
     const SpParMat<IU, NUM, UDER>	&A,
 	const FullyDistDMat<IU, NUV>	&X,
@@ -2719,7 +3095,7 @@ template <typename SR,
 		  typename NUV,
 		  typename UDER> 
 DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-SpMM_sA_2D
+SpMM_sA_2D_CUDA
 (
     const SpParMat<IU, NUM, UDER>	&A,
 	const DnParMat<IU, NUV>			&X,
@@ -2846,7 +3222,7 @@ template <typename SR,
 		  typename NUV,
 		  typename UDER> 
 DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-SpMM_sC
+SpMM_sC_CUDA
 (
     const SpParMat<IU, NUM, UDER>	&A,
 	const DnParMat<IU, NUV>			&X,
@@ -2973,7 +3349,7 @@ SpMM_sC
 	return Y;
 }
 
-	
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////

@@ -123,7 +123,7 @@ private:
 			  typename UDER> 
 	friend
 	DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-	SpMM_sC (const SpParMat<IU, NUM, UDER> &A,
+	SpMM_sC_CPU (const SpParMat<IU, NUM, UDER> &A,
 			 const DnParMat<IU, NUV> &X,
 			 spmm_stats &stats);
 
@@ -134,7 +134,7 @@ private:
 			  typename UDER> 
 	friend
 	DnParMat<IU, typename promote_trait<NUM, NUV>::T_promote> 
-	SpMM_sA_2D (const SpParMat<IU, NUM, UDER> &A,
+	SpMM_sA_2D_CPU (const SpParMat<IU, NUM, UDER> &A,
 				const DnParMat<IU, NUV> &X,
 				spmm_stats &stats);
 };

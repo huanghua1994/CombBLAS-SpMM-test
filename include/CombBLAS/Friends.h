@@ -43,9 +43,11 @@
 #include "CombBLAS.h"
 #include "PreAllocatedSPA.h"
 
-// #include "mkl.h"
+#include "mkl.h"
+#ifdef USE_CUDA
 #include "cuda.h"
 #include "cusparse.h"
+#endif
 #include <string>
 using std::string;
 
@@ -1408,42 +1410,30 @@ csc_gespmm_mkl
 	const RHS				*X,
 	LHS						*Y,
 	int						 d,	// dense mat dimension
-	std::ofstream			&ofs
+	NU                       beta,
+	spmm_stats              &stats
 )
 {
-
-	// int max_threads = mkl_get_max_threads();
-	// // ofs << "MKL max threads " << max_threads << std::endl;
-
-	// sparse_matrix_t A_mkl = NULL;
-	// mkl_sparse_d_create_csc(&A_mkl,
-	// 						SPARSE_INDEX_BASE_ZERO,
-	// 						A.getnrow(),
-	// 						A.getncol(),
-	// 						A.csc->jc,
-	// 						A.csc->jc + 1,
-	// 						A.csc->ir,
-	// 						A.csc->num);
-
-	
-	// struct matrix_descr descr_type_gen;
-	// descr_type_gen.type = SPARSE_MATRIX_TYPE_GENERAL;
-	// double alpha = 1.0, beta = 0.0;
-	// int res = mkl_sparse_d_mm(SPARSE_OPERATION_NON_TRANSPOSE,
-	// 						  alpha,
-	// 						  A_mkl,
-	// 						  descr_type_gen,
-	// 						  SPARSE_LAYOUT_ROW_MAJOR,
-	// 						  X,
-	// 						  d,
-	// 						  d,
-	// 						  beta,
-	// 						  Y,
-	// 						  d);
+	sparse_matrix_t A_mkl = NULL;
+	mkl_sparse_d_create_csc(
+		&A_mkl, SPARSE_INDEX_BASE_ZERO, A.getnrow(), A.getncol(),
+		A.csc->jc, A.csc->jc + 1, A.csc->ir, A.csc->num
+	);
+	struct matrix_descr descr_type_gen;
+	descr_type_gen.type = SPARSE_MATRIX_TYPE_GENERAL;
+	descr_type_gen.mode = SPARSE_FILL_MODE_FULL;
+	descr_type_gen.diag = SPARSE_DIAG_NON_UNIT;
+	mkl_sparse_set_mm_hint(A_mkl, SPARSE_OPERATION_NON_TRANSPOSE, descr_type_gen, SPARSE_LAYOUT_ROW_MAJOR, d, 1);
+	double alpha = 1.0;
+	mkl_sparse_d_mm(
+		SPARSE_OPERATION_NON_TRANSPOSE, alpha, A_mkl, descr_type_gen, 
+		SPARSE_LAYOUT_ROW_MAJOR, X, d, d, beta, Y, d
+	);
+	mkl_sparse_destroy(A_mkl);
 }
 
 
-
+#ifdef USE_CUDA
 template <typename SR,
 		  typename IU,
 		  typename NU,
@@ -1822,7 +1812,8 @@ csc_gespmm_cusparse_v2
 	
 	return;
 }
-	
+
+#endif // #ifdef USE_CUDA	
 	
 
 }

@@ -296,7 +296,8 @@ private:
 	template <typename SR, typename IU, typename NU, typename RHS, typename LHS>
 	friend
 	void
-	csc_gespmm_mkl (const SpCCols<IU, NU> &A, const RHS *x, LHS *y, int d, std::ofstream &ofs);
+	csc_gespmm_mkl (const SpCCols<IU, NU> &A, const RHS *x, LHS *y, int d, NU beta,
+						 spmm_stats &stats);
 
 	template <typename SR, typename IU, typename NU, typename RHS, typename LHS>
 	friend

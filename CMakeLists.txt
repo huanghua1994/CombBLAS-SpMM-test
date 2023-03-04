@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.3)
-project(CombBLAS VERSION 1.16.0 LANGUAGES C CXX CUDA)
+project(CombBLAS VERSION 1.16.0 LANGUAGES C CXX)
 
 # require c++14
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-SET(CMAKE_CUDA_FLAGS "-std=c++14 -ccbin ${CMAKE_CXX_COMPILER} -O2 \
--Wno-deprecated-declarations -w -DNVCC -Xcompiler -fopenmp")
+# SET(CMAKE_CUDA_FLAGS "-std=c++14 -ccbin ${CMAKE_CXX_COMPILER} -O2 \
+# -Wno-deprecated-declarations -w -DNVCC -Xcompiler -fopenmp")
 
 
 # Main CombBLAS library
@@ -29,7 +29,7 @@ target_include_directories(CombBLAS PRIVATE include/CombBLAS)
 # MPI and OpenMP dependencies
 find_package(MPI REQUIRED)
 find_package(OpenMP)
-find_package(CUDA 11 REQUIRED)
+# find_package(CUDA 11 REQUIRED)
 
 if(TARGET MPI::MPI_CXX) # Use target if available (CMake >= 3.9)
   target_link_libraries(CombBLAS PUBLIC MPI::MPI_CXX)
@@ -48,11 +48,11 @@ elseif(OPENMP_FOUND)
   target_link_libraries(CombBLAS PUBLIC "${OpenMP_CXX_FLAGS}")
 endif()
 
-if (CUDA_FOUND)
-	INCLUDE_DIRECTORIES(${CUDA_INCLUDE_DIRS})
-else()
-	message("CUDA not found")
-endif()
+# if (CUDA_FOUND)
+# 	INCLUDE_DIRECTORIES(${CUDA_INCLUDE_DIRS})
+# else()
+# 	message("CUDA not found")
+# endif()
 
 
 add_subdirectory(usort)
