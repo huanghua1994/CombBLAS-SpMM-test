@@ -81,6 +81,10 @@ public:
     auto GetInternal() const    { return GetCSC(); }
     auto GetInternal(int i) const  { return GetCSC(i); }
     
+    void *mkl_spA_ptr = NULL;
+    void *mkl_descrA_ptr = NULL;
+    void InitMKLSparseMatrix();
+    void FreeMKLSparseMatrix();
     
     class SpColIter //! Iterate over (sparse) columns of the sparse matrix
     {

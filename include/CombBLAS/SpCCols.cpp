@@ -36,6 +36,8 @@
 #include <iomanip>
 #include <cassert>
 
+#include "mkl.h"
+
 namespace combblas {
 
 /****************************************************************************/
@@ -79,6 +81,7 @@ SpCCols<IT,NT>::~SpCCols()
 				delete csc;
 			}
 		}
+		FreeMKLSparseMatrix();
 	}
 }
 
@@ -190,6 +193,7 @@ SpCCols<IT,NT>::SpCCols(const SpTuples<IT, NT> & rhs, bool transpose)
                 }
             }
 		}
+		this->InitMKLSparseMatrix();
 	}
 }
 
@@ -559,8 +563,34 @@ SpCCols<IT, NT>::put (std::ofstream &outfile) const
 	return outfile;
 }
 
+template <class IT, class NT>
+void SpCCols<IT, NT>::InitMKLSparseMatrix()
+{
+	sparse_matrix_t *mkl_spA_ptr = (sparse_matrix_t *) malloc(sizeof(sparse_matrix_t));
+	struct matrix_descr *mkl_descrA_ptr = (struct matrix_descr *) malloc(sizeof(struct matrix_descr));
+    mkl_sparse_d_create_csc(
+        mkl_spA_ptr, SPARSE_INDEX_BASE_ZERO, this->getnrow(), this->getncol(),
+        this->csc->jc, this->csc->jc + 1, this->csc->ir, this->csc->num
+	);
+    mkl_descrA_ptr->type = SPARSE_MATRIX_TYPE_GENERAL;
+    mkl_descrA_ptr->mode = SPARSE_FILL_MODE_FULL;
+    mkl_descrA_ptr->diag = SPARSE_DIAG_NON_UNIT;
+    // We don't know <dense_matrix_size> and <dense_matrix_size> (last two arguments),
+	// use a conservative value 16/10 for now.
+    mkl_sparse_set_mm_hint(*mkl_spA_ptr, SPARSE_OPERATION_NON_TRANSPOSE, *mkl_descrA_ptr, SPARSE_LAYOUT_ROW_MAJOR, 16, 10);
+    mkl_sparse_optimize(*mkl_spA_ptr);
+    this->mkl_spA_ptr = (void *) mkl_spA_ptr;
+    this->mkl_descrA_ptr = (void *) mkl_descrA_ptr;
+}
 
-
+template <class IT, class NT>
+void SpCCols<IT, NT>::FreeMKLSparseMatrix()
+{
+    sparse_matrix_t *mkl_spA_ptr = (sparse_matrix_t *) this->mkl_spA_ptr;
+    mkl_sparse_destroy(*mkl_spA_ptr);
+    free(this->mkl_spA_ptr);
+    free(this->mkl_descrA_ptr);
+}
 
 /****************************************************************************/
 /************************* PRIVATE MEMBER FUNCTIONS *************************/
