@@ -1414,13 +1414,22 @@ csc_gespmm_mkl
 	spmm_stats              &stats
 )
 {
-    sparse_matrix_t *mkl_spA_ptr = (sparse_matrix_t *) A.mkl_spA_ptr;
-    struct matrix_descr *mkl_descrA_ptr = (struct matrix_descr *) A.mkl_descrA_ptr;
-    double alpha = 1.0;
-    mkl_sparse_d_mm(
-        SPARSE_OPERATION_NON_TRANSPOSE, alpha, *mkl_spA_ptr, *mkl_descrA_ptr, 
-        SPARSE_LAYOUT_ROW_MAJOR, X, d, d, beta, Y, d
-    );
+	sparse_matrix_t A_mkl = NULL;
+	mkl_sparse_d_create_csc(
+		&A_mkl, SPARSE_INDEX_BASE_ZERO, A.getnrow(), A.getncol(),
+		A.csc->jc, A.csc->jc + 1, A.csc->ir, A.csc->num
+	);
+	struct matrix_descr descr_type_gen;
+	descr_type_gen.type = SPARSE_MATRIX_TYPE_GENERAL;
+	descr_type_gen.mode = SPARSE_FILL_MODE_FULL;
+	descr_type_gen.diag = SPARSE_DIAG_NON_UNIT;
+	mkl_sparse_set_mm_hint(A_mkl, SPARSE_OPERATION_NON_TRANSPOSE, descr_type_gen, SPARSE_LAYOUT_ROW_MAJOR, d, 1);
+	double alpha = 1.0;
+	mkl_sparse_d_mm(
+		SPARSE_OPERATION_NON_TRANSPOSE, alpha, A_mkl, descr_type_gen, 
+		SPARSE_LAYOUT_ROW_MAJOR, X, d, d, beta, Y, d
+	);
+	mkl_sparse_destroy(A_mkl);
 }
 
 
