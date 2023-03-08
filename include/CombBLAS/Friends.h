@@ -1414,6 +1414,7 @@ csc_gespmm_mkl
 	spmm_stats              &stats
 )
 {
+	if ((A.csc == NULL) || (A.csc->nz == 0)) return;
 	sparse_matrix_t A_mkl = NULL;
 	mkl_sparse_d_create_csc(
 		&A_mkl, SPARSE_INDEX_BASE_ZERO, A.getnrow(), A.getncol(),
@@ -1424,6 +1425,7 @@ csc_gespmm_mkl
 	descr_type_gen.mode = SPARSE_FILL_MODE_FULL;
 	descr_type_gen.diag = SPARSE_DIAG_NON_UNIT;
 	mkl_sparse_set_mm_hint(A_mkl, SPARSE_OPERATION_NON_TRANSPOSE, descr_type_gen, SPARSE_LAYOUT_ROW_MAJOR, d, 1);
+	mkl_sparse_optimize(A_mkl);
 	double alpha = 1.0;
 	mkl_sparse_d_mm(
 		SPARSE_OPERATION_NON_TRANSPOSE, alpha, A_mkl, descr_type_gen, 
