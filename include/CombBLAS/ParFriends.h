@@ -2577,16 +2577,17 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 		std::to_string(t_tot[0]/np) + " " +
 		std::to_string(t_tot[2]) + "\n";
 
-	size_t cs_raw[3], cs_min[3], cs_max[3];
+	size_t cs_raw[3], cs_min[3], cs_max[3], cs_sum[3];
 	cs_raw[0] = stats.A_comm_size;
 	cs_raw[1] = stats.B_comm_size;
 	cs_raw[2] = stats.C_comm_size;
 	MPI_Reduce(&cs_raw[0], &cs_min[0], 3, MPI_UNSIGNED_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
 	MPI_Reduce(&cs_raw[0], &cs_max[0], 3, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
-	tmp += "Number of matrix elements communicated (MIN, MAX)\n";
-	tmp += "A " + std::to_string(cs_min[0]) + " " + std::to_string(cs_max[0]) + "\n";
-	tmp += "B " + std::to_string(cs_min[1]) + " " + std::to_string(cs_max[1]) + "\n";
-	tmp += "C " + std::to_string(cs_min[2]) + " " + std::to_string(cs_max[2]) + "\n";
+	MPI_Reduce(&cs_raw[0], &cs_sum[0], 3, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+	tmp += "Number of matrix elements communicated (MIN, MAX, SUM)\n";
+	tmp += "A " + std::to_string(cs_min[0]) + " " + std::to_string(cs_max[0]) + " " + std::to_string(cs_sum[0]) + "\n";
+	tmp += "B " + std::to_string(cs_min[1]) + " " + std::to_string(cs_max[1]) + " " + std::to_string(cs_sum[1]) + "\n";
+	tmp += "C " + std::to_string(cs_min[2]) + " " + std::to_string(cs_max[2]) + " " + std::to_string(cs_sum[2]) + "\n";
 
 	
 	if (rank == 0)
