@@ -2819,7 +2819,7 @@ SpMM_sA_2D_CPU
 		// init Y		
 		NUV *YSend_cur = YSend;
 		
-		std::fill_n(YSend_cur, YSendSizes[s], id);
+		//std::fill_n(YSend_cur, YSendSizes[s], id);  // unnecessary, since beta == 0
 
 		csc_gespmm_mkl<SR>(*(A.spSeq), XRecv_cur, YSend_cur, (int)X.getncol(), static_cast<NUM>(0.0), stats);
 

@@ -1419,23 +1419,24 @@ csc_gespmm_mkl
 )
 {
 	if ((A.csc == NULL) || (A.csc->nz == 0)) return;
-	sparse_matrix_t A_mkl = NULL;
+	sparse_matrix_t mkl_spA = NULL;
 	mkl_sparse_d_create_csc(
-		&A_mkl, SPARSE_INDEX_BASE_ZERO, A.getnrow(), A.getncol(),
+		&mkl_spA, SPARSE_INDEX_BASE_ZERO, A.getnrow(), A.getncol(),
 		A.csc->jc, A.csc->jc + 1, A.csc->ir, A.csc->num
 	);
-	struct matrix_descr descr_type_gen;
-	descr_type_gen.type = SPARSE_MATRIX_TYPE_GENERAL;
-	descr_type_gen.mode = SPARSE_FILL_MODE_FULL;
-	descr_type_gen.diag = SPARSE_DIAG_NON_UNIT;
-	mkl_sparse_set_mm_hint(A_mkl, SPARSE_OPERATION_NON_TRANSPOSE, descr_type_gen, SPARSE_LAYOUT_ROW_MAJOR, d, 1);
-	mkl_sparse_optimize(A_mkl);
+	struct matrix_descr mkl_descA;
+	mkl_descA.type = SPARSE_MATRIX_TYPE_GENERAL;
+	mkl_descA.mode = SPARSE_FILL_MODE_FULL;
+	mkl_descA.diag = SPARSE_DIAG_NON_UNIT;
+	// Skip the optimization, make it a fair comparison
+	//mkl_sparse_set_mm_hint(A_mkl, SPARSE_OPERATION_NON_TRANSPOSE, mkl_descA, SPARSE_LAYOUT_ROW_MAJOR, d, 1);
+	//mkl_sparse_optimize(A_mkl);
 	double alpha = 1.0;
 	mkl_sparse_d_mm(
-		SPARSE_OPERATION_NON_TRANSPOSE, alpha, A_mkl, descr_type_gen, 
+		SPARSE_OPERATION_NON_TRANSPOSE, alpha, mkl_spA, mkl_descA, 
 		SPARSE_LAYOUT_ROW_MAJOR, X, d, d, beta, Y, d
 	);
-	mkl_sparse_destroy(A_mkl);
+	mkl_sparse_destroy(mkl_spA);
 }
 
 
