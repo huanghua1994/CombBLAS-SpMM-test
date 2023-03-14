@@ -2577,6 +2577,17 @@ print_spmm_stats (spmm_stats &stats, int nruns)
 		std::to_string(t_tot[0]/np) + " " +
 		std::to_string(t_tot[2]) + "\n";
 
+	size_t cs_raw[3], cs_min[3], cs_max[3];
+	cs_raw[0] = stats.A_comm_size;
+	cs_raw[1] = stats.B_comm_size;
+	cs_raw[2] = stats.C_comm_size;
+	MPI_Reduce(&cs_raw[0], &cs_min[0], 3, MPI_UNSIGNED_LONG_LONG, MPI_MIN, 0, MPI_COMM_WORLD);
+	MPI_Reduce(&cs_raw[0], &cs_max[0], 3, MPI_UNSIGNED_LONG_LONG, MPI_MAX, 0, MPI_COMM_WORLD);
+	tmp += "Number of matrix elements communicated (MIN, MAX)\n";
+	tmp += "A " + std::to_string(cs_min[0]) + " " + std::to_string(cs_max[0]) + "\n";
+	tmp += "B " + std::to_string(cs_min[1]) + " " + std::to_string(cs_max[1]) + "\n";
+	tmp += "C " + std::to_string(cs_min[2]) + " " + std::to_string(cs_max[2]) + "\n";
+
 	
 	if (rank == 0)
 	{
@@ -2632,6 +2643,7 @@ SpMM_sA_CPU
 				 diagneigh, TRX,
 				 trxnums, trxsize, MPIType<NUV>(),
 				 diagneigh, TRX, world, &status);
+	stats.B_comm_size = xsize + trxsize;
 
 	int cneighs, crank;
 	MPI_Comm_size(cworld, &cneighs);
@@ -2647,6 +2659,8 @@ SpMM_sA_CPU
 	
 	MPI_Allgatherv(trxnums, trxsize, MPIType<NUV>(),
 				   numacc, csize, dpls, MPIType<NUV>(), cworld);
+	stats.B_comm_size += 2 * accsize;
+
 	delete [] trxnums;
 
 	auto t_end = std::chrono::high_resolution_clock::now();
@@ -2691,6 +2705,7 @@ SpMM_sA_CPU
 	MPI_Reduce_scatter(y_loc, SpHelper::p2a(Y.arr_), recvcounts,
 					   MPIType<T_promote>(), SR::mpi_op(), rworld);
 	t_end = std::chrono::high_resolution_clock::now();
+	stats.C_comm_size = ysize;
 	stats.t_sA_comm_post += static_cast<std::chrono::duration<double> >
 		(t_end-t_beg).count();
 
@@ -2755,6 +2770,8 @@ SpMM_sA_2D_CPU
 				 diagneigh, TRX,
 				 trxnums, trxsize, MPIType<NUV>(),
 				 diagneigh, TRX, world, &status);
+	stats.B_comm_size = xsize + trxsize;
+	stats.C_comm_size = 0;
 
 	IU *XRecvSizes = new IU[nstages];
 	IU	max_xrecv_size = 0;
@@ -2790,6 +2807,7 @@ SpMM_sA_2D_CPU
 
 		MPI_Bcast(XRecv_cur, XRecvSizes[s], MPIType<NUV>(),
 				  s, X.cgr->GetColWorld());
+		stats.B_comm_size += XRecvSizes[s];
 
 		auto t_end = std::chrono::high_resolution_clock::now();
 		
@@ -2815,6 +2833,7 @@ SpMM_sA_2D_CPU
 		// reduce
 		MPI_Reduce(YSend_cur, SpHelper::p2a(Y.arr), YSendSizes[s],
 				   MPIType<NT_Y>(), SR::mpi_op(), s, Y.cgr->GetRowWorld());
+		stats.C_comm_size += YSendSizes[s];
 
 		t_end = std::chrono::high_resolution_clock::now();
 		stats.t_sA_2D_comm_reduceY +=
@@ -2893,6 +2912,8 @@ SpMM_sC_CPU
 	UDER	*ARecv = NULL;
 	NUV		*XRecv = new NUV[max_xrecv_size];
 
+	stats.A_comm_size = 0;
+	stats.B_comm_size = 0;
 	for (int s = 0; s < nstages; ++s)
 	{
 		auto t_beg = std::chrono::high_resolution_clock::now();
@@ -2911,6 +2932,7 @@ SpMM_sC_CPU
 		}
 
 		SpParHelper::BCastMatrix(cgr_Y->GetRowWorld(), *ARecv, ess, s);
+		stats.A_comm_size += ARecv->getnnz();
 
 
 		auto t_end = std::chrono::high_resolution_clock::now();
@@ -2927,6 +2949,7 @@ SpMM_sC_CPU
 
 		MPI_Bcast(XRecv_cur, XRecvSizes[s], MPIType<NUV>(),
 				  s, cgr_Y->GetColWorld());
+		stats.B_comm_size += XRecvSizes[s];
 
 
 		t_end = std::chrono::high_resolution_clock::now();

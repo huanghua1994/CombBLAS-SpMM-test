@@ -1325,6 +1325,10 @@ spmm_stats
 
 	double t_sA_2D_comm_bcastX;
 	double t_sA_2D_comm_reduceY;	
+
+    size_t A_comm_size;
+    size_t B_comm_size;
+    size_t C_comm_size;
 };
 
 	
